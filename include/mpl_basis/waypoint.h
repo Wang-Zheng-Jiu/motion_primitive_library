@@ -146,4 +146,16 @@ typedef Waypoint<2> Waypoint2D;
 /// Waypoint for 3D
 typedef Waypoint<3> Waypoint3D;
 
+namespace std
+{
+  template <>
+  struct hash<Waypoint3D>
+  {
+    std::size_t operator()(const Waypoint3D &waypoint) const
+    {
+      return hash_value(waypoint);
+    }
+  };
+}
+
 #endif
