@@ -10,6 +10,8 @@
 
 #include <mpl_planner/common/env_base.h>
 #include <mpl_planner/common/graph_search.h>
+#include <csbpl_common/visibility_graph.h>
+
 
 namespace MPL {
 /**
@@ -264,6 +266,23 @@ class PlannerBase {
     }
   }
 
+  void setTimeLimit(double time_limit) {
+    ENV_->time_limit_ = time_limit;
+  }
+
+  void setVisibilityHeuristic(Vec3f& goal) {
+    ENV_->heur_visibility_ = std::make_shared<csbpl_common::VisibilityGraphPlanner>(goal);
+    ENV_->heur_visibility_->runPlanner();
+  }
+
+  std::shared_ptr<MPL::env_base<Dim>> getEnv() {
+    return ENV_;
+  }
+
+  decimal_t getEpsilon() {
+    return epsilon_;
+  }
+
   /**
    * @brief Planning thread
    * @param start start waypoint
@@ -303,6 +322,7 @@ class PlannerBase {
       }
     }
 
+    ENV_->set_start(start);
     ENV_->set_goal(goal);
 
     ENV_->expanded_nodes_.clear();
@@ -324,7 +344,7 @@ class PlannerBase {
     return true;
   }
 
- protected:
+// protected:
   /// Environment class
   std::shared_ptr<MPL::env_base<Dim>> ENV_;
   /// Planner workspace
@@ -346,3 +366,4 @@ class PlannerBase {
 }  // namespace MPL
 
 #endif
+

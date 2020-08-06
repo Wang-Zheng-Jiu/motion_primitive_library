@@ -9,6 +9,8 @@
 #include <mpl_basis/trajectory.h>
 #include <mpl_planner/common/state_space.h>
 
+#include <chrono>
+
 namespace MPL {
 
 /**
@@ -19,6 +21,8 @@ namespace MPL {
 template <int Dim, typename Coord>
 class GraphSearch {
  public:
+  typedef std::chrono::high_resolution_clock Clock;
+
   /**
    * @brief Simple empty constructor
    *
@@ -59,8 +63,16 @@ class GraphSearch {
       ss_ptr->hm_[start_coord] = currNode_ptr;
     }
 
+    double nearest_node_to_goal_dist = std::numeric_limits<double>::infinity();
+    StatePtr<Coord> nearest_node_to_goal;
+
+    Clock::time_point start_time = Clock::now();
     int expand_iteration = 0;
     while (true) {
+
+      double time_elapsed =
+              std::chrono::duration_cast<std::chrono::duration<double> >(Clock::now() -
+              start_time).count();
       expand_iteration++;
       // get element with smallest cost
       currNode_ptr = ss_ptr->pq_.top().second;
@@ -86,17 +98,19 @@ class GraphSearch {
           succNode_ptr = std::make_shared<State<Coord>>(succ_coord[s]);
           succNode_ptr->h =
               ss_ptr->eps_ == 0 ? 0 : ENV->get_heur(succNode_ptr->coord);
-          /*
-           * Comment this block if build multiple connected graph
-           succNode_ptr->pred_coord.push_back(currNode_ptr->coord);
-           succNode_ptr->pred_action_id.push_back(succ_act_id[s]);
-           succNode_ptr->pred_action_cost.push_back(succ_cost[s]);
-           */
-        }
 
-        /**
-         * Comment following if build single connected graph
-         * */
+          /**
+             * Comment this block if build multiple connected graph
+           * */
+//             succNode_ptr->pred_coord.push_back(currNode_ptr->coord);
+//             succNode_ptr->pred_action_id.push_back(succ_act_id[s]);
+//             succNode_ptr->pred_action_cost.push_back(succ_cost[s]);
+          //*/
+          }
+
+          /**
+           * Comment following if build single connected graph
+           * */
         succNode_ptr->pred_coord.push_back(currNode_ptr->coord);
         succNode_ptr->pred_action_cost.push_back(succ_cost[s]);
         succNode_ptr->pred_action_id.push_back(succ_act_id[s]);
@@ -114,9 +128,14 @@ class GraphSearch {
            succNode_ptr->pred_action_id.front() = succ_act_id[s];
            succNode_ptr->pred_action_cost.front() = succ_cost[s];
            */
+
           succNode_ptr->g = tentative_gval;  // Update gval
 
           decimal_t fval = succNode_ptr->g + (ss_ptr->eps_) * succNode_ptr->h;
+
+//          std::cout << "[GraphSearch::Astar] From " << currNode_ptr->coord.pos.format(CommaInitFmt)
+//                    << " to " << succNode_ptr->coord.pos.format(CommaInitFmt)
+//                    << " whose f=" << fval << std::endl;
 
           // if currently in OPEN, update
           if (succNode_ptr->iterationopened && !succNode_ptr->iterationclosed) {
@@ -145,7 +164,21 @@ class GraphSearch {
       // If goal reached, abort!
       if (ENV->is_goal(currNode_ptr->coord)) break;
 
-      // If maximum expansion reached, abort!
+      if ((*currNode_ptr->heapkey).first < nearest_node_to_goal_dist) {
+        nearest_node_to_goal_dist = (currNode_ptr->h);
+        nearest_node_to_goal = currNode_ptr;
+      }
+
+      if (time_elapsed > ENV->time_limit_) {
+        printf(ANSI_COLOR_RED
+               "Time limit [%f] exceeded!!!!!!\n\n" ANSI_COLOR_RESET,
+               time_elapsed);
+        currNode_ptr = nearest_node_to_goal;
+        break;
+      }
+
+
+        // If maximum expansion reached, abort!
       if (max_expand > 0 && expand_iteration >= max_expand) {
         printf(ANSI_COLOR_RED
                "MaxExpandStep [%d] Reached!!!!!!\n\n" ANSI_COLOR_RESET,

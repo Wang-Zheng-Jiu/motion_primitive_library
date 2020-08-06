@@ -8,6 +8,10 @@
 
 #include <mpl_basis/trajectory.h>
 
+#include <csbpl_common/visibility_graph.h>
+
+Eigen::IOFormat CommaInitFmt(Eigen::StreamPrecision, Eigen::DontAlignCols, ", ", ", ", "", "", " [", "] ");
+
 namespace MPL {
 
 /**
@@ -48,20 +52,49 @@ class env_base {
     size_t id = state.t / dt_;
     if (!prior_traj_.empty() && id < prior_traj_.size())
       return cal_heur(state, prior_traj_[id].first) + prior_traj_[id].second;
-    else
+    else {
       return cal_heur(state, goal_node_);
+//      return cal_heur(state, goal_node_) + cal_visibility_heur(state);
+//      return cal_visibility_heur(state);
+    }
+  }
+
+  virtual decimal_t cal_visibility_heur(const Waypoint<Dim>& state) const {
+    Vec3f pos(state.pos(0),state.pos(1),state.pos(2));
+    double shortest_dist = heur_visibility_->getShortestDistToSource(pos);
+//    std::cout << "shortest dist" <<  shortest_dist << std::endl;
+    if (shortest_dist >= 0) {
+      return std::sqrt((2*shortest_dist)/a_max_);
+    }
   }
 
   /// calculate the cost from state to goal
   virtual decimal_t cal_heur(const Waypoint<Dim>& state,
                              const Waypoint<Dim>& goal) const {
     if (heur_ignore_dynamics_) {
-      if (v_max_ > 0) {
-        return w_ * (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() /
-               v_max_;
-      } else
-        return w_ * (state.pos - goal.pos).template lpNorm<Eigen::Infinity>();
+      return cal_inad_heur(state,goal);
     }
+    return cal_ad_heur(state,goal);
+  }
+
+  decimal_t cal_inad_heur(const Waypoint<Dim>& state,
+                        const Waypoint<Dim>& goal) const
+  {
+    if (v_max_ > 0) {
+      return w_ * (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() /
+             v_max_;
+    } else
+      return w_ * (state.pos - goal.pos).template lpNorm<Eigen::Infinity>();
+  }
+
+  decimal_t cal_inad_heur(const Waypoint<Dim>& state) const
+  {
+    return cal_inad_heur(state, goal_node_);
+  }
+
+  decimal_t cal_ad_heur(const Waypoint<Dim>& state,
+                          const Waypoint<Dim>& goal) const
+  {
     // return 0;
     // return w_*(state.pos - goal.pos).norm();
     if (state.control == Control::JRK && goal.control == Control::JRK) {
@@ -83,7 +116,7 @@ class env_base {
       std::vector<decimal_t> ts = solve(a, b, c, d, e, f, g);
 
       decimal_t t_bar =
-          (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
+              (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
       ts.push_back(t_bar);
       decimal_t min_cost = std::numeric_limits<decimal_t>::max();
       for (auto t : ts) {
@@ -113,7 +146,7 @@ class env_base {
       std::vector<decimal_t> ts = solve(a, b, c, d, e, f, g);
 
       decimal_t t_bar =
-          (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
+              (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
       ts.push_back(t_bar);
       decimal_t min_cost = std::numeric_limits<decimal_t>::max();
       for (auto t : ts) {
@@ -142,7 +175,7 @@ class env_base {
       std::vector<decimal_t> ts = solve(a, b, c, d, e, f, g);
 
       decimal_t t_bar =
-          (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
+              (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
       ts.push_back(t_bar);
 
       decimal_t min_cost = std::numeric_limits<decimal_t>::max();
@@ -168,7 +201,7 @@ class env_base {
 
       std::vector<decimal_t> ts = quartic(c5, c4, c3, c2, c1);
       decimal_t t_bar =
-          (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
+              (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
       ts.push_back(t_bar);
 
       decimal_t cost = std::numeric_limits<decimal_t>::max();
@@ -193,7 +226,7 @@ class env_base {
 
       std::vector<decimal_t> ts = quartic(c5, c4, c3, c2, c1);
       decimal_t t_bar =
-          (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
+              (state.pos - goal.pos).template lpNorm<Eigen::Infinity>() / v_max_;
       ts.push_back(t_bar);
 
       decimal_t cost = std::numeric_limits<decimal_t>::max();
@@ -208,6 +241,11 @@ class env_base {
       return (w_ + 1) * (state.pos - goal.pos).norm();
     else
       return w_ * (state.pos - goal.pos).norm() / v_max_;
+  }
+
+  decimal_t cal_ad_heur(const Waypoint<Dim>& state) const
+  {
+    return cal_ad_heur(state, goal_node_);
   }
 
   /// Replace the original cast function
@@ -291,6 +329,12 @@ class env_base {
   /// Set max time
   void set_t_max(int t) { t_max_ = t; }
 
+  /// Set start state
+  bool set_start(const Waypoint<Dim>& state) {
+    if (prior_traj_.empty()) start_node_ = state;
+    return prior_traj_.empty();
+  }
+
   /// Set goal state
   bool set_goal(const Waypoint<Dim>& state) {
     if (prior_traj_.empty()) goal_node_ = state;
@@ -313,6 +357,7 @@ class env_base {
     printf("+               wyaw: %.2f               +\n", wyaw_);
     printf("+                 dt: %.2f               +\n", dt_);
     printf("+              t_max: %.2f               +\n", t_max_);
+    printf("+         time_limit: %.2f               +\n", time_limit_);
     printf("+              v_max: %.2f               +\n", v_max_);
     printf("+              a_max: %.2f               +\n", a_max_);
     printf("+              j_max: %.2f               +\n", j_max_);
@@ -346,6 +391,22 @@ class env_base {
 
   /// Retrieve dt
   decimal_t get_dt() const { return dt_; }
+
+  /// Retrieve v_max_
+  decimal_t get_vmax() const { return v_max_; }
+
+  /// Retrieve a_max_
+  decimal_t get_amax() const { return a_max_; }
+
+  /// Get start
+  Waypoint<Dim> get_start() const {
+    return start_node_;
+  }
+
+  /// Get goal
+  Waypoint<Dim> get_goal() const {
+    return goal_node_;
+  }
 
   /**
    * @brief Get successor
@@ -392,6 +453,8 @@ class env_base {
   decimal_t dt_{1.0};
   /// Array of constant control input
   vec_E<VecDf> U_;
+  /// Start node
+  Waypoint<Dim> start_node_;
   /// Goal node
   Waypoint<Dim> goal_node_;
   /// Prior trajectory
@@ -402,6 +465,12 @@ class env_base {
   mutable vec_Vecf<Dim> expanded_nodes_;
   /// expanded edges for debug
   mutable vec_E<Primitive<Dim>> expanded_edges_;
+  /// Time limit for the planner
+  double time_limit_;
+
+  /// Heuristic calculation using visibility graph
+  csbpl_common::VisibilityGraphPlanner::Ptr heur_visibility_;
+
 };
 }  // namespace MPL
 
