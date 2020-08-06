@@ -5,15 +5,23 @@ project(motion_primitive_library)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wno-deprecated-declarations")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+set(CSBPL_COMMON_INCLUDE_DIRS "/home/gaussian/cmu_ri_phd/phd_research/csbpl_ros/src/csbpl_common/include")
 
 set(BUILD_SHARED_LIBS ON)
 
+find_package(catkin_simple REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(csbpl_common REQUIRED)
 PKG_CHECK_MODULES(YAMLCPP REQUIRED yaml-cpp)
-include_directories(${EIGEN3_INCLUDE_DIR} ${OpenCV_INCLUDE_DIRS} include)
+include_directories(${EIGEN3_INCLUDE_DIR}
+        ${OpenCV_INCLUDE_DIRS}
+        ${CSBPL_COMMON_INCLUDE_DIRS}
+        include)
 
 if(YAMLCPP_FOUND)
   message(STATUS "Found yaml-cpp.")
@@ -70,3 +78,5 @@ install(TARGETS poly_solver map_planner
 install(DIRECTORY include/mpl_basis include/mpl_traj_solver include/mpl_planner include/mpl_collision
   DESTINATION include
   )
+
+cs_export()
